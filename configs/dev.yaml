@@ -1,0 +1,5 @@
+project:
+  env: dev
+  log_level: DEBUG
+worker:
+  interval_seconds: 5

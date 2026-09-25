@@ -1,0 +1,5 @@
+project:
+  env: prod
+  log_level: INFO
+worker:
+  interval_seconds: 30

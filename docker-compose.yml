@@ -1,0 +1,26 @@
+services:
+  api:
+    build: .
+    container_name: asignacion-estudiantes-service_api
+    env_file: [.env]
+    environment:
+      PYTHONPATH: /app/src
+    ports: ["8000:8000"]
+    command: ["python", "-m", "asignacion_estudiantes_service.main_api"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  worker:
+    build: .
+    container_name: asignacion-estudiantes-service_worker
+    env_file: [.env]
+    environment:
+      PYTHONPATH: /app/src
+    command: ["python", "-m", "asignacion_estudiantes_service.main_worker"]
+    depends_on:
+      api:
+        condition: service_healthy

@@ -1,0 +1,15 @@
+project:
+  name: asignacion-estudiantes-service
+  env: dev
+  log_level: INFO
+
+service:
+  host: 0.0.0.0
+  port: 8000
+
+worker:
+  enabled: true
+  interval_seconds: 10
+
+database:
+  url: sqlite:///./data/asignacion.db
