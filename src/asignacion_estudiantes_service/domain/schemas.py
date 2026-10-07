@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -22,7 +24,7 @@ class RestriccionIn(BaseModel):
 
 
 class AsignacionConfigIn(BaseModel):
-    numero_periodos: int = Field(ge=6, le=8)
+    numero_periodos: int = Field(ge=5, le=8)
     estudiantes_aleatorio: bool = True
     instituciones_aleatorio: bool = True
     asignacion: str = "BALANCEADA"
@@ -122,6 +124,8 @@ class AsignacionOut(BaseModel):
     id: int
     ejecucion_id: int
     estudiante_id: str
+    estudiante_nombre: str | None = None
+    estudiante_semestre: str | None = None
     periodo: int
     especialidad: str
     institucion: str
@@ -138,6 +142,19 @@ class AsignacionEjecucionOut(BaseModel):
     total_asignaciones: int
     total_pendientes: int
     mensaje: str | None = None
+    created_at: datetime | None = None
+
+
+class MatrizAsignacionRowIn(BaseModel):
+    estudiante_id: str = Field(min_length=1)
+    periodo: int = Field(ge=1, le=8)
+    especialidad: str = ""
+    institucion: str = ""
+
+
+class MatrizAsignacionIn(BaseModel):
+    filas: list[MatrizAsignacionRowIn]
+    mensaje: str | None = "Malla cargada desde archivo ajustado por usuario."
 
 
 class LimpiezaResultadosOut(BaseModel):

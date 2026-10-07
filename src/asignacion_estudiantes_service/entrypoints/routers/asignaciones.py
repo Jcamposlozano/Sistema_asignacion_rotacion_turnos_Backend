@@ -1,19 +1,25 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from asignacion_estudiantes_service.adapters.db.session import get_session
 from asignacion_estudiantes_service.application.analysis_service import obtener_analisis_asignacion
 from asignacion_estudiantes_service.application.asignacion_service import (
     AsignacionNotFoundError,
+    crear_ejecucion_desde_matriz,
     ejecutar_asignacion,
     limpiar_resultados_huerfanos,
+    listar_ejecuciones_parametria,
     listar_resultados,
     obtener_ejecucion,
     obtener_ultima_ejecucion_parametria,
 )
 from asignacion_estudiantes_service.application.diagnostic_service import obtener_diagnostico_asignacion
+from asignacion_estudiantes_service.application.file_import_service import (
+    ArchivoImportError,
+    leer_matriz_archivo,
+)
 from asignacion_estudiantes_service.application.optimization_service import (
     OptimizacionError,
     optimizar_cupos_parametria,
@@ -26,6 +32,7 @@ from asignacion_estudiantes_service.domain.schemas import (
     DiagnosticoAsignacionOut,
     EjecutarAsignacionOut,
     LimpiezaResultadosOut,
+    MatrizAsignacionIn,
     OptimizacionCuposOut,
     OptimizacionParametriaOut,
     OptimizarParametriaIn,
@@ -64,6 +71,47 @@ def ultima_ejecucion(parametria_id: int, session: Session = Depends(get_session)
             detail="La parametría no tiene ejecuciones guardadas",
         )
     return ejecucion
+
+
+@router.get("/parametrias/{parametria_id}/ejecuciones", response_model=list[AsignacionEjecucionOut])
+def ejecuciones_parametria(parametria_id: int, session: Session = Depends(get_session)):
+    return listar_ejecuciones_parametria(session, parametria_id)
+
+
+@router.post("/parametrias/{parametria_id}/matriz", response_model=AsignacionEjecucionOut)
+def cargar_matriz_ajustada(
+    parametria_id: int,
+    payload: MatrizAsignacionIn,
+    session: Session = Depends(get_session),
+):
+    try:
+        return crear_ejecucion_desde_matriz(session, parametria_id, payload)
+    except AsignacionNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/parametrias/{parametria_id}/matriz-archivo", response_model=AsignacionEjecucionOut)
+async def cargar_matriz_ajustada_archivo(
+    parametria_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    content = await file.read()
+    try:
+        payload = leer_matriz_archivo(file.filename or "", content)
+        return crear_ejecucion_desde_matriz(session, parametria_id, payload)
+    except AsignacionNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (ArchivoImportError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/ejecuciones/{ejecucion_id}", response_model=AsignacionEjecucionOut)
@@ -125,5 +173,5 @@ def optimizar_parametria(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ParametriaError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc

@@ -14,6 +14,7 @@ from asignacion_estudiantes_service.application.parametria_service import (
 from asignacion_estudiantes_service.domain.models import (
     Asignacion,
     AsignacionEjecucion,
+    Clinica,
     Combinacion,
     DistribucionPeriodo,
     Parametria,
@@ -21,6 +22,7 @@ from asignacion_estudiantes_service.domain.models import (
     ParametriaInstitucion,
     Restriccion,
 )
+from asignacion_estudiantes_service.domain.schemas import MatrizAsignacionIn, limpiar_texto
 
 
 class AsignacionNotFoundError(ValueError):
@@ -115,14 +117,110 @@ def obtener_ultima_ejecucion_parametria(
     )
 
 
+def listar_ejecuciones_parametria(session: Session, parametria_id: int) -> list[AsignacionEjecucion]:
+    return list(
+        session.scalars(
+            select(AsignacionEjecucion)
+            .where(AsignacionEjecucion.parametria_id == parametria_id)
+            .order_by(AsignacionEjecucion.id.desc())
+        )
+    )
+
+
 def listar_resultados(session: Session, ejecucion_id: int) -> list[Asignacion]:
     return list(
         session.scalars(
             select(Asignacion)
             .where(Asignacion.ejecucion_id == ejecucion_id)
+            .options(selectinload(Asignacion.estudiante))
             .order_by(Asignacion.estudiante_id, Asignacion.periodo)
         )
     )
+
+
+def crear_ejecucion_desde_matriz(
+    session: Session, parametria_id: int, payload: MatrizAsignacionIn
+) -> AsignacionEjecucion:
+    parametria = obtener_parametria_completa(session, parametria_id)
+    if parametria is None:
+        raise AsignacionNotFoundError(f"No existe la parametría {parametria_id}")
+
+    estudiantes_parametria = {item.estudiante_id for item in parametria.estudiantes}
+    clinicas = {
+        limpiar_texto(clinica.nombre): clinica
+        for clinica in session.scalars(select(Clinica))
+    }
+    periodos_esperados = set(range(1, parametria.numero_periodos + 1))
+    filas_por_estudiante: dict[str, set[int]] = {}
+    asignaciones: list[Asignacion] = []
+    total_pendientes = 0
+
+    for fila in payload.filas:
+        estudiante_id = str(fila.estudiante_id).strip()
+        if estudiante_id not in estudiantes_parametria:
+            raise ValueError(
+                f"El estudiante {estudiante_id} no pertenece a la parametría {parametria_id}"
+            )
+        if fila.periodo not in periodos_esperados:
+            raise ValueError(
+                f"El periodo {fila.periodo} no es válido para una parametría de "
+                f"{parametria.numero_periodos} periodos"
+            )
+        periodos = filas_por_estudiante.setdefault(estudiante_id, set())
+        if fila.periodo in periodos:
+            raise ValueError(
+                f"El estudiante {estudiante_id} tiene el periodo {fila.periodo} repetido"
+            )
+        periodos.add(fila.periodo)
+
+        institucion = limpiar_texto(fila.institucion)
+        especialidad = limpiar_texto(fila.especialidad)
+        pendiente = not institucion or not especialidad or institucion == "PENDIENTE"
+        if pendiente:
+            institucion = "PENDIENTE"
+        clinica = clinicas.get(institucion)
+        if not pendiente and clinica is None:
+            raise ValueError(f"La institución {fila.institucion} no existe en la parametría/catalogo")
+        if pendiente:
+            total_pendientes += 1
+
+        asignaciones.append(
+            Asignacion(
+                parametria_id=parametria.id,
+                estudiante_id=estudiante_id,
+                periodo=fila.periodo,
+                especialidad=especialidad or "PENDIENTE",
+                clinica_id=None if pendiente else clinica.id,
+                institucion=institucion,
+                pendiente=pendiente,
+            )
+        )
+
+    for estudiante_id in estudiantes_parametria:
+        faltantes = periodos_esperados - filas_por_estudiante.get(estudiante_id, set())
+        if faltantes:
+            raise ValueError(
+                f"El estudiante {estudiante_id} no tiene todos los periodos. "
+                f"Faltan: {', '.join(str(item) for item in sorted(faltantes))}"
+            )
+
+    ejecucion = AsignacionEjecucion(
+        parametria_id=parametria.id,
+        estado="AJUSTADA_MANUALMENTE",
+        total_estudiantes=len(estudiantes_parametria),
+        total_asignaciones=len(asignaciones),
+        total_pendientes=total_pendientes,
+        mensaje=payload.mensaje or "Malla cargada desde archivo ajustado por usuario.",
+    )
+    session.add(ejecucion)
+    session.flush()
+    for asignacion in asignaciones:
+        asignacion.ejecucion_id = ejecucion.id
+        session.add(asignacion)
+
+    session.commit()
+    session.refresh(ejecucion)
+    return ejecucion
 
 
 def limpiar_ejecuciones_parametria(session: Session, parametria_id: int) -> None:

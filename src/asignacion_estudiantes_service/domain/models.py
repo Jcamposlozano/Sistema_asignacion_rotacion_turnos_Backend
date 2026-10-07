@@ -170,3 +170,11 @@ class Asignacion(Base):
     __table_args__ = (
         UniqueConstraint("ejecucion_id", "estudiante_id", "periodo", name="uq_ejec_est_periodo"),
     )
+
+    @property
+    def estudiante_nombre(self) -> str | None:
+        return self.estudiante.nombre if self.estudiante else None
+
+    @property
+    def estudiante_semestre(self) -> str | None:
+        return self.estudiante.semestre if self.estudiante else None

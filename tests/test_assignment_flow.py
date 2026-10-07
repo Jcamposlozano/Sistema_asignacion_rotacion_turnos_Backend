@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from io import BytesIO
+
+import openpyxl
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import sessionmaker
 
 from asignacion_estudiantes_service.application.analysis_service import obtener_analisis_asignacion
 from asignacion_estudiantes_service.application.asignacion_service import (
+    crear_ejecucion_desde_matriz,
     ejecutar_asignacion,
     limpiar_resultados_huerfanos,
+    listar_ejecuciones_parametria,
     listar_resultados,
     obtener_ultima_ejecucion_parametria,
 )
@@ -14,6 +19,11 @@ from asignacion_estudiantes_service.application.diagnostic_service import (
     obtener_diagnostico_asignacion,
 )
 from asignacion_estudiantes_service.application.dashboard_service import obtener_resumen_gerencial
+from asignacion_estudiantes_service.application.file_import_service import (
+    leer_estudiantes_archivo,
+    leer_instituciones_archivo,
+    leer_parametria_plantilla,
+)
 from asignacion_estudiantes_service.application.parametria_service import (
     actualizar_parametria,
     crear_parametria,
@@ -32,6 +42,7 @@ from asignacion_estudiantes_service.domain.models import (
     Parametria,
 )
 from asignacion_estudiantes_service.domain.schemas import (
+    MatrizAsignacionIn,
     OptimizarParametriaIn,
     ParametriaCargaIn,
 )
@@ -129,6 +140,114 @@ def test_carga_parametria_y_ejecuta_asignacion(tmp_path):
     assert analisis is not None
     assert analisis["resumen"]["asignaciones_realizadas"] == 16
     assert len(analisis["resumen_especialidad"]) == 5
+
+
+def test_importa_estudiantes_desde_excel_xlsx():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["ID", "NOMBRE", "SEMESTRE"])
+    sheet.append(["352043", "Estudiante Uno", "6"])
+    stream = BytesIO()
+    workbook.save(stream)
+
+    estudiantes = leer_estudiantes_archivo("estudiantes.xlsx", stream.getvalue())
+
+    assert len(estudiantes) == 1
+    assert estudiantes[0].id == "352043"
+    assert estudiantes[0].nombre == "Estudiante Uno"
+    assert estudiantes[0].semestre == "6"
+
+
+def test_importa_instituciones_desde_excel_xlsx():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["INSTITUCION", "ESPECIALIDAD", "CANTIDAD"])
+    sheet.append(["CLINICA A", "MEDICINA INTERNA", 6])
+    stream = BytesIO()
+    workbook.save(stream)
+
+    instituciones = leer_instituciones_archivo("instituciones.xlsx", stream.getvalue())
+
+    assert len(instituciones) == 1
+    assert instituciones[0].institucion == "CLINICA A"
+    assert instituciones[0].especialidad == "MEDICINA INTERNA"
+    assert instituciones[0].cantidad == 6
+
+
+def test_importa_plantilla_parametria_desde_excel_xlsx():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Asignacion"
+    sheet.append(["Campo", "Valor"])
+    sheet.append(["Nombre", "Escenario plantilla"])
+    sheet.append(["Numero Periodos", 6])
+    sheet.append(["Estudiantes Aleatorio", "False"])
+    sheet.append(["Instituciones Aleatorio", "False"])
+    sheet.append(["Asignacion", "BALANCEADA"])
+    sheet.append(["Institucion residual", "CLINICA A"])
+
+    instituciones = workbook.create_sheet("Instituciones")
+    instituciones.append(["INSTITUCION", "ESPECIALIDAD", "CANTIDAD"])
+    instituciones.append(["CLINICA A", "MEDICINA INTERNA", 6])
+
+    estudiantes = workbook.create_sheet("Estudiantes")
+    estudiantes.append(["ID", "NOMBRE", "SEMESTRE"])
+    estudiantes.append(["1", "Estudiante Uno", "6"])
+
+    distribucion = workbook.create_sheet("Distribucion")
+    distribucion.append(["ESPECIALIDAD", "ASIGNACION"])
+    distribucion.append(["MEDICINA INTERNA", 6])
+
+    restricciones = workbook.create_sheet("Restricciones")
+    restricciones.append(["ESTUDIANTE", "INSTITUCION", "ESPECIALIDAD"])
+
+    combinaciones = workbook.create_sheet("Combinaciones")
+    combinaciones.append(["ESPECIALIDAD 1", "ESPECIALIDAD 2", "BLOQUE"])
+
+    stream = BytesIO()
+    workbook.save(stream)
+
+    payload = leer_parametria_plantilla("plantilla.xlsx", stream.getvalue())
+
+    assert payload.nombre == "Escenario plantilla"
+    assert payload.asignacion.numero_periodos == 6
+    assert payload.asignacion.estudiantes_aleatorio is False
+    assert payload.instituciones[0].institucion == "CLINICA A"
+    assert payload.estudiantes[0].nombre == "Estudiante Uno"
+    assert payload.distribucion_periodos[0].asignacion == 6
+
+
+def test_permite_parametria_de_cinco_periodos(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path}/test.db", future=True)
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    payload = ParametriaCargaIn(
+        nombre="Cinco periodos",
+        instituciones=[
+            {"institucion": "CLINICA A", "especialidad": "MEDICINA INTERNA", "cantidad": 2},
+        ],
+        restricciones=[],
+        asignacion={
+            "numero_periodos": 5,
+            "estudiantes_aleatorio": False,
+            "instituciones_aleatorio": False,
+            "asignacion": "BALANCEADA",
+            "institucion_residual": "CLINICA A",
+        },
+        distribucion_periodos=[{"especialidad": "MEDICINA INTERNA", "asignacion": 5}],
+        combinaciones=[],
+        estudiantes=[{"id": "1", "nombre": "Estudiante Uno", "semestre": "5"}],
+    )
+
+    with SessionLocal() as session:
+        parametria = crear_parametria(session, payload)
+        ejecucion = ejecutar_asignacion(session, parametria.id, max_intentos=1)
+        resultados = listar_resultados(session, ejecucion.id)
+
+    assert ejecucion.total_asignaciones == 5
+    assert ejecucion.total_pendientes == 0
+    assert {row.periodo for row in resultados} == {1, 2, 3, 4, 5}
 
 
 def test_actualiza_y_elimina_parametria(tmp_path):
@@ -376,6 +495,57 @@ def test_obtiene_ultima_ejecucion_guardada_de_parametria(tmp_path):
     assert ultima is not None
     assert primera_id < segunda_id
     assert ultima_id == segunda_id
+
+
+def test_carga_matriz_ajustada_como_ejecucion_manual(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path}/test.db", future=True)
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    payload = ParametriaCargaIn(
+        nombre="Matriz ajustada",
+        instituciones=[
+            {"institucion": "CLINICA A", "especialidad": "MEDICINA INTERNA", "cantidad": 6},
+        ],
+        restricciones=[],
+        asignacion={
+            "numero_periodos": 6,
+            "estudiantes_aleatorio": False,
+            "instituciones_aleatorio": False,
+            "asignacion": "BALANCEADA",
+            "institucion_residual": "CLINICA A",
+        },
+        distribucion_periodos=[{"especialidad": "MEDICINA INTERNA", "asignacion": 6}],
+        combinaciones=[],
+        estudiantes=[{"id": "1", "nombre": "Estudiante Uno", "semestre": "6"}],
+    )
+
+    matriz = MatrizAsignacionIn(
+        filas=[
+            {
+                "estudiante_id": "1",
+                "periodo": periodo,
+                "especialidad": "MEDICINA INTERNA",
+                "institucion": "CLINICA A",
+            }
+            for periodo in range(1, 7)
+        ]
+    )
+
+    with SessionLocal() as session:
+        parametria = crear_parametria(session, payload)
+        ejecucion = crear_ejecucion_desde_matriz(session, parametria.id, matriz)
+        resultados = listar_resultados(session, ejecucion.id)
+        ejecuciones = listar_ejecuciones_parametria(session, parametria.id)
+        ultima = obtener_ultima_ejecucion_parametria(session, parametria.id)
+
+    assert ejecucion.estado == "AJUSTADA_MANUALMENTE"
+    assert ejecucion.total_asignaciones == 6
+    assert ejecucion.total_pendientes == 0
+    assert resultados[0].estudiante_nombre == "Estudiante Uno"
+    assert ejecuciones[0].id == ejecucion.id
+    assert ultima is not None
+    assert ultima.id == ejecucion.id
 
 
 def test_limpia_resultados_huerfanos_para_dashboard(tmp_path):

@@ -6,6 +6,8 @@ services:
     environment:
       PYTHONPATH: /app/src
     ports: ["8000:8000"]
+    volumes:
+      - ./data:/app/data
     command: ["python", "-m", "asignacion_estudiantes_service.main_api"]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
@@ -20,6 +22,8 @@ services:
     env_file: [.env]
     environment:
       PYTHONPATH: /app/src
+    volumes:
+      - ./data:/app/data
     command: ["python", "-m", "asignacion_estudiantes_service.main_worker"]
     depends_on:
       api:
