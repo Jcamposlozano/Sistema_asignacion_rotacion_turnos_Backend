@@ -26,6 +26,10 @@ app.include_router(parametrias.router)
 app.include_router(asignaciones.router)
 app.include_router(catalogos.router)
 app.include_router(dashboard.router)
+app.include_router(parametrias.router, prefix="/api")
+app.include_router(asignaciones.router, prefix="/api")
+app.include_router(catalogos.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
 
 
 @app.on_event("startup")
@@ -36,3 +40,8 @@ def startup():
 @app.get("/health")
 def health():
     return {"status": "ok", "service": SERVICE_NAME}
+
+
+@app.get("/api/health")
+def api_health():
+    return health()
