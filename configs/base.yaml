@@ -6,6 +6,9 @@ project:
 service:
   host: 0.0.0.0
   port: 8000
+  cors_origins:
+    - http://localhost:4200
+    - http://127.0.0.1:4200
 
 worker:
   enabled: true

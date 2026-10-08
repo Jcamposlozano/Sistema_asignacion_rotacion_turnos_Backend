@@ -47,6 +47,15 @@ def load_config(config_dir: str = "configs") -> dict[str, Any]:
 
     cfg["service"]["host"] = os.getenv("HOST", cfg["service"].get("host", "0.0.0.0"))
     cfg["service"]["port"] = int(os.getenv("PORT", cfg["service"].get("port", 8000)))
+    cors_origins = os.getenv("CORS_ORIGINS")
+    if cors_origins is not None:
+        cfg["service"]["cors_origins"] = [
+            origin.strip().rstrip("/") for origin in cors_origins.split(",") if origin.strip()
+        ]
+    else:
+        cfg["service"]["cors_origins"] = [
+            str(origin).rstrip("/") for origin in cfg["service"].get("cors_origins", [])
+        ]
 
     cfg["worker"]["enabled"] = _env_bool("WORKER_ENABLED", bool(cfg["worker"].get("enabled", True)))
     cfg["worker"]["interval_seconds"] = int(

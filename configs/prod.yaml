@@ -1,5 +1,8 @@
 project:
   env: prod
   log_level: INFO
+service:
+  cors_origins:
+    - https://d1rqrhfshibwpp.cloudfront.net
 worker:
   interval_seconds: 30
