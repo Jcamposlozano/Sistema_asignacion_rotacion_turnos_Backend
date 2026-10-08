@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def limpiar_texto(valor: str | None) -> str:
@@ -44,6 +44,25 @@ class DistribucionPeriodoIn(BaseModel):
     asignacion: int = Field(ge=0)
 
 
+class PeriodoFechaIn(BaseModel):
+    periodo: int = Field(ge=1, le=8)
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
+    fecha: date | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def normalizar_rango(self) -> PeriodoFechaIn:
+        if self.fecha_inicio is None and self.fecha is not None:
+            self.fecha_inicio = self.fecha
+        if (
+            self.fecha_inicio is not None
+            and self.fecha_fin is not None
+            and self.fecha_fin < self.fecha_inicio
+        ):
+            raise ValueError("fecha_fin no puede ser anterior a fecha_inicio")
+        return self
+
+
 class CombinacionIn(BaseModel):
     especialidad_1: str = Field(min_length=1)
     especialidad_2: str = Field(min_length=1)
@@ -72,6 +91,7 @@ class ParametriaCargaIn(BaseModel):
     restricciones: list[RestriccionIn] = Field(default_factory=list)
     asignacion: AsignacionConfigIn
     distribucion_periodos: list[DistribucionPeriodoIn]
+    fechas_periodos: list[PeriodoFechaIn] = Field(default_factory=list)
     combinaciones: list[CombinacionIn] = Field(default_factory=list)
     estudiantes: list[EstudianteIn]
 

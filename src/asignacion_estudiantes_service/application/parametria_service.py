@@ -13,6 +13,7 @@ from asignacion_estudiantes_service.domain.models import (
     Parametria,
     ParametriaEstudiante,
     ParametriaInstitucion,
+    ParametriaPeriodoFecha,
     Restriccion,
 )
 from asignacion_estudiantes_service.domain.schemas import ParametriaCargaIn, limpiar_texto
@@ -102,6 +103,26 @@ def validar_carga(payload: ParametriaCargaIn) -> None:
     if periodos_bloques > payload.asignacion.numero_periodos:
         raise ParametriaError("Las combinaciones consumen más periodos que los configurados")
 
+    periodos_fechas = [item.periodo for item in payload.fechas_periodos]
+    repetidos_fechas = sorted(
+        {item for item in periodos_fechas if periodos_fechas.count(item) > 1}
+    )
+    if repetidos_fechas:
+        raise ParametriaError(
+            "Hay fechas repetidas para los periodos: "
+            + ", ".join(str(item) for item in repetidos_fechas)
+        )
+    fuera_rango = [
+        item.periodo
+        for item in payload.fechas_periodos
+        if item.periodo > payload.asignacion.numero_periodos
+    ]
+    if fuera_rango:
+        raise ParametriaError(
+            "Hay fechas para periodos fuera del rango configurado: "
+            + ", ".join(str(item) for item in sorted(fuera_rango))
+        )
+
     asignacion_por_especialidad = {
         limpiar_texto(item.especialidad): item.asignacion for item in payload.distribucion_periodos
     }
@@ -166,6 +187,16 @@ def crear_parametria(session: Session, payload: ParametriaCargaIn) -> Parametria
             )
         )
 
+    for item in payload.fechas_periodos:
+        session.add(
+            ParametriaPeriodoFecha(
+                parametria_id=parametria.id,
+                periodo=item.periodo,
+                fecha_inicio=item.fecha_inicio,
+                fecha_fin=item.fecha_fin,
+            )
+        )
+
     for item in payload.combinaciones:
         longitud = 4 if item.bloque == "X4" else 2
         session.add(
@@ -191,7 +222,6 @@ def actualizar_parametria(
     if parametria is None:
         return None
 
-    _limpiar_resultados_parametria(session, parametria_id)
     _limpiar_detalle_parametria(session, parametria_id)
 
     config = payload.asignacion
@@ -260,6 +290,16 @@ def _crear_detalle_parametria(
             )
         )
 
+    for item in payload.fechas_periodos:
+        session.add(
+            ParametriaPeriodoFecha(
+                parametria_id=parametria_id,
+                periodo=item.periodo,
+                fecha_inicio=item.fecha_inicio,
+                fecha_fin=item.fecha_fin,
+            )
+        )
+
     for item in payload.combinaciones:
         longitud = 4 if item.bloque == "X4" else 2
         session.add(
@@ -277,6 +317,7 @@ def _limpiar_detalle_parametria(session: Session, parametria_id: int) -> None:
     for model in (
         Restriccion,
         Combinacion,
+        ParametriaPeriodoFecha,
         DistribucionPeriodo,
         ParametriaInstitucion,
         ParametriaEstudiante,
@@ -307,6 +348,7 @@ def obtener_parametria_completa(session: Session, parametria_id: int) -> Paramet
             selectinload(Parametria.restricciones).selectinload(Restriccion.clinica),
             selectinload(Parametria.restricciones).selectinload(Restriccion.estudiante),
             selectinload(Parametria.distribuciones),
+            selectinload(Parametria.fechas_periodos),
             selectinload(Parametria.combinaciones),
             selectinload(Parametria.estudiantes).selectinload(ParametriaEstudiante.estudiante),
         )

@@ -17,6 +17,7 @@ from asignacion_estudiantes_service.domain.schemas import (
     MatrizAsignacionIn,
     MatrizAsignacionRowIn,
     ParametriaCargaIn,
+    PeriodoFechaIn,
     RestriccionIn,
     limpiar_texto,
 )
@@ -81,6 +82,7 @@ def leer_parametria_plantilla(filename: str, content: bytes) -> ParametriaCargaI
     instituciones_rows = _sheet(sheets, ["instituciones", "clinicas", "escenarios"])
     estudiantes_rows = _sheet(sheets, ["estudiantes"])
     distribucion_rows = _sheet(sheets, ["distribucion", "distribucion periodos", "periodos"])
+    fechas_rows = _sheet(sheets, ["fechas", "fechas periodos", "periodo fechas"], required=False)
     restricciones_rows = _sheet(sheets, ["restricciones"], required=False)
     combinaciones_rows = _sheet(sheets, ["combinaciones", "bloques"], required=False)
 
@@ -91,6 +93,7 @@ def leer_parametria_plantilla(filename: str, content: bytes) -> ParametriaCargaI
         restricciones=_parse_restricciones(restricciones_rows),
         asignacion=asignacion,
         distribucion_periodos=_parse_distribucion(distribucion_rows),
+        fechas_periodos=_parse_fechas_periodos(fechas_rows),
         combinaciones=_parse_combinaciones(combinaciones_rows),
         estudiantes=leer_estudiantes_rows(estudiantes_rows),
     )
@@ -263,6 +266,38 @@ def _parse_distribucion(rows: list[list[str]]) -> list[DistribucionPeriodoIn]:
     if not distribucion:
         raise ArchivoImportError("No se encontró distribución de periodos válida en la plantilla")
     return distribucion
+
+
+def _parse_fechas_periodos(rows: list[list[str]]) -> list[PeriodoFechaIn]:
+    if not rows:
+        return []
+    header, data_rows = _header_rows(rows, {"periodo", "fecha"})
+    periodo_index = _buscar_columna(header, ["periodo"], default=0)
+    inicio_index = _buscar_columna(
+        header,
+        ["fecha inicio", "fecha_inicio", "inicio", "desde", "fecha"],
+        default=1,
+    )
+    fin_index = _buscar_columna(
+        header,
+        ["fecha fin", "fecha_fin", "fin", "hasta"],
+        default=-1,
+    )
+    fechas: list[PeriodoFechaIn] = []
+    for row in data_rows:
+        periodo = _cell(row, periodo_index)
+        if not periodo:
+            continue
+        fecha_inicio = _cell(row, inicio_index) or None
+        fecha_fin = (_cell(row, fin_index) or None) if fin_index >= 0 else None
+        fechas.append(
+            PeriodoFechaIn(
+                periodo=_to_int(periodo),
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+            )
+        )
+    return fechas
 
 
 def _parse_combinaciones(rows: list[list[str]]) -> list[CombinacionIn]:

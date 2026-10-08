@@ -198,6 +198,11 @@ def test_importa_plantilla_parametria_desde_excel_xlsx():
     distribucion.append(["ESPECIALIDAD", "ASIGNACION"])
     distribucion.append(["MEDICINA INTERNA", 6])
 
+    fechas = workbook.create_sheet("Fechas")
+    fechas.append(["PERIODO", "FECHA INICIO", "FECHA FIN"])
+    fechas.append([1, "2026-01-15", "2026-01-31"])
+    fechas.append([2, "2026-02-15", "2026-02-28"])
+
     restricciones = workbook.create_sheet("Restricciones")
     restricciones.append(["ESTUDIANTE", "INSTITUCION", "ESPECIALIDAD"])
 
@@ -215,6 +220,9 @@ def test_importa_plantilla_parametria_desde_excel_xlsx():
     assert payload.instituciones[0].institucion == "CLINICA A"
     assert payload.estudiantes[0].nombre == "Estudiante Uno"
     assert payload.distribucion_periodos[0].asignacion == 6
+    assert payload.fechas_periodos[0].periodo == 1
+    assert payload.fechas_periodos[0].fecha_inicio.isoformat() == "2026-01-15"
+    assert payload.fechas_periodos[0].fecha_fin.isoformat() == "2026-01-31"
 
 
 def test_permite_parametria_de_cinco_periodos(tmp_path):
@@ -293,6 +301,7 @@ def test_actualiza_y_elimina_parametria(tmp_path):
         assert actualizada.nombre == "Escenario actualizado"
         assert estudiante is not None
         assert estudiante.semestre == "7"
+        assert obtener_ultima_ejecucion_parametria(session, parametria.id) is not None
 
         eliminada = eliminar_parametria(session, parametria.id)
         assert eliminada is True

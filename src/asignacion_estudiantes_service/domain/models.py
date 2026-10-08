@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -46,6 +46,9 @@ class Parametria(Base):
         back_populates="parametria", cascade="all, delete-orphan"
     )
     distribuciones: Mapped[list[DistribucionPeriodo]] = relationship(
+        back_populates="parametria", cascade="all, delete-orphan"
+    )
+    fechas_periodos: Mapped[list[ParametriaPeriodoFecha]] = relationship(
         back_populates="parametria", cascade="all, delete-orphan"
     )
     combinaciones: Mapped[list[Combinacion]] = relationship(
@@ -116,6 +119,22 @@ class DistribucionPeriodo(Base):
 
     __table_args__ = (
         UniqueConstraint("parametria_id", "especialidad", name="uq_param_distribucion_esp"),
+    )
+
+
+class ParametriaPeriodoFecha(Base):
+    __tablename__ = "parametria_periodo_fechas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    parametria_id: Mapped[int] = mapped_column(ForeignKey("parametria.id"), index=True)
+    periodo: Mapped[int] = mapped_column(Integer)
+    fecha_inicio: Mapped[date | None] = mapped_column(Date, nullable=True)
+    fecha_fin: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    parametria: Mapped[Parametria] = relationship(back_populates="fechas_periodos")
+
+    __table_args__ = (
+        UniqueConstraint("parametria_id", "periodo", name="uq_param_periodo_fecha"),
     )
 
 

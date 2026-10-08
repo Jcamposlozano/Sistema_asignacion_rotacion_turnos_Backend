@@ -111,7 +111,10 @@ def obtener_ultima_ejecucion_parametria(
 ) -> AsignacionEjecucion | None:
     return session.scalar(
         select(AsignacionEjecucion)
-        .where(AsignacionEjecucion.parametria_id == parametria_id)
+        .where(
+            AsignacionEjecucion.parametria_id == parametria_id,
+            AsignacionEjecucion.total_asignaciones > 0,
+        )
         .order_by(AsignacionEjecucion.id.desc())
         .limit(1)
     )
@@ -121,7 +124,10 @@ def listar_ejecuciones_parametria(session: Session, parametria_id: int) -> list[
     return list(
         session.scalars(
             select(AsignacionEjecucion)
-            .where(AsignacionEjecucion.parametria_id == parametria_id)
+            .where(
+                AsignacionEjecucion.parametria_id == parametria_id,
+                AsignacionEjecucion.total_asignaciones > 0,
+            )
             .order_by(AsignacionEjecucion.id.desc())
         )
     )

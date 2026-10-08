@@ -144,6 +144,14 @@ def obtener(parametria_id: int, session: Session = Depends(get_session)):
             {"especialidad": item.especialidad, "asignacion": item.asignacion}
             for item in parametria.distribuciones
         ],
+        "fechas_periodos": [
+            {
+                "periodo": item.periodo,
+                "fecha_inicio": item.fecha_inicio.isoformat() if item.fecha_inicio else None,
+                "fecha_fin": item.fecha_fin.isoformat() if item.fecha_fin else None,
+            }
+            for item in sorted(parametria.fechas_periodos, key=lambda row: row.periodo)
+        ],
         "combinaciones": [
             {
                 "especialidad_1": item.especialidad_1,
