@@ -24,7 +24,7 @@ class RestriccionIn(BaseModel):
 
 
 class AsignacionConfigIn(BaseModel):
-    numero_periodos: int = Field(ge=5, le=8)
+    numero_periodos: int = Field(ge=4, le=8)
     estudiantes_aleatorio: bool = True
     instituciones_aleatorio: bool = True
     asignacion: str = "BALANCEADA"

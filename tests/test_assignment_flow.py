@@ -225,27 +225,27 @@ def test_importa_plantilla_parametria_desde_excel_xlsx():
     assert payload.fechas_periodos[0].fecha_fin.isoformat() == "2026-01-31"
 
 
-def test_permite_parametria_de_cinco_periodos(tmp_path):
+def test_permite_parametria_de_cuatro_periodos(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path}/test.db", future=True)
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
     payload = ParametriaCargaIn(
-        nombre="Cinco periodos",
+        nombre="Cuatro periodos",
         instituciones=[
             {"institucion": "CLINICA A", "especialidad": "MEDICINA INTERNA", "cantidad": 2},
         ],
         restricciones=[],
         asignacion={
-            "numero_periodos": 5,
+            "numero_periodos": 4,
             "estudiantes_aleatorio": False,
             "instituciones_aleatorio": False,
             "asignacion": "BALANCEADA",
             "institucion_residual": "CLINICA A",
         },
-        distribucion_periodos=[{"especialidad": "MEDICINA INTERNA", "asignacion": 5}],
+        distribucion_periodos=[{"especialidad": "MEDICINA INTERNA", "asignacion": 4}],
         combinaciones=[],
-        estudiantes=[{"id": "1", "nombre": "Estudiante Uno", "semestre": "5"}],
+        estudiantes=[{"id": "1", "nombre": "Estudiante Uno", "semestre": "4"}],
     )
 
     with SessionLocal() as session:
@@ -253,9 +253,9 @@ def test_permite_parametria_de_cinco_periodos(tmp_path):
         ejecucion = ejecutar_asignacion(session, parametria.id, max_intentos=1)
         resultados = listar_resultados(session, ejecucion.id)
 
-    assert ejecucion.total_asignaciones == 5
+    assert ejecucion.total_asignaciones == 4
     assert ejecucion.total_pendientes == 0
-    assert {row.periodo for row in resultados} == {1, 2, 3, 4, 5}
+    assert {row.periodo for row in resultados} == {1, 2, 3, 4}
 
 
 def test_actualiza_y_elimina_parametria(tmp_path):
